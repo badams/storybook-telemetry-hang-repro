@@ -106,6 +106,6 @@ echo "exit: $?"   # 0, returns immediately
 
 ## Links
 
-- Upstream issue: _TODO_
-- Upstream fix PR: _TODO_
+- Upstream issue: [storybookjs/storybook#35084](https://github.com/storybookjs/storybook/issues/35084)
+- Upstream fix PR: [storybookjs/storybook#35085](https://github.com/storybookjs/storybook/pull/35085)
 - Related reports: storybookjs/storybook#34446, storybookjs/storybook#29828, storybookjs/storybook#24303
