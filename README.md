@@ -28,21 +28,21 @@ In CI this looks like a build that prints success (or gets close to it) and then
 sits until the job's wall-clock limit kills it. With chromatic-cli it surfaces as
 `Command timed out after 600000ms` (`CLI_STORYBOOK_BUILD_FAILED`).
 
-## Reproduce it locally
+## Reproduce it in CI
 
-```bash
-npm install
-node harness.mjs          # CAP_SECONDS=120 by default; try CAP_SECONDS=20 for a quick run
-```
+This repo reproduces the hang **naturally** — no blackhole, just a real
+`chromatic --dry-run` against the live telemetry endpoint — across two GitHub
+Actions workflows:
 
-`harness.mjs`:
+- [`chromatic-hang-hunt.yml`](.github/workflows/chromatic-hang-hunt.yml) — loops
+  `npx chromatic --dry-run` across 4 shards × 10 attempts on **Node 26**. A shard
+  goes **red** when it catches a hang (the chromatic build timeout fires).
+- [`chromatic-hang-hunt-node22.yml`](.github/workflows/chromatic-hang-hunt-node22.yml)
+  — same hunt on **Node 22**, for a node-version frequency comparison.
 
-1. starts a "blackhole" TCP server that accepts + reads but never replies,
-2. points Storybook at it via `STORYBOOK_TELEMETRY_URL`,
-3. runs `storybook build` and watches it.
-
-Expected output: the build compiles in ~2s, and then the harness reports that the
-process is **still alive** at the cap — `HANG REPRODUCED` — and exits 0.
+So far the hang reproduces on Node 26 but not Node 22 — strong evidence that newer
+Node turns a stalled telemetry connection into a permanent hang where older Node
+eventually recovers.
 
 ### Control: prove it is the telemetry call
 
@@ -52,14 +52,6 @@ Disable telemetry and the same build exits cleanly in seconds:
 STORYBOOK_DISABLE_TELEMETRY=1 npx storybook build
 echo "exit: $?"   # 0, returns immediately
 ```
-
-## Reproduce it in CI
-
-The [`Reproduce telemetry build hang`](../../actions) workflow runs the harness on
-Node 26 (ubuntu) and uploads the build log. The job is **green when the hang is
-reproduced**; the evidence is in the log (compilation finishes, process pinned for
-120s). If a future Storybook release fixes the missing timeout, the build will
-exit on its own and the job turns red — a signal that this repro is stale.
 
 ## Notes
 
