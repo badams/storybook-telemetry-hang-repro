@@ -1,0 +1,26 @@
+diff --git a/node_modules/storybook/dist/_node-chunks/chunk-KZ7QL465.js b/node_modules/storybook/dist/_node-chunks/chunk-KZ7QL465.js
+index 5724302..ad878e5 100644
+--- a/node_modules/storybook/dist/_node-chunks/chunk-KZ7QL465.js
++++ b/node_modules/storybook/dist/_node-chunks/chunk-KZ7QL465.js
+@@ -971,14 +971,17 @@ var retryingFetch = (0, import_fetch_retry.default)(fetch), URL = process.env.ST
+   nodeVersion: process.versions.node,
+   storybookVersion: getVersionNumber()
+ }, prepareRequest = async (data, context, options) => {
+-  let { eventType, payload, metadata, ...rest } = data, sessionId = await getSessionId(), eventId = nanoid(), body = { ...rest, eventType, eventId, sessionId, metadata, payload, context };
++  let { eventType, payload, metadata, ...rest } = data, sessionId = await getSessionId(), eventId = nanoid(), body = { ...rest, eventType, eventId, sessionId, metadata, payload, context }, signal = AbortSignal.timeout(3e4), maxRetries = 3;
+   return retryingFetch(URL, {
+     method: "post",
+     body: JSON.stringify(body),
+     headers: { "Content-Type": "application/json" },
+-    retries: 3,
+-    retryOn: [503, 504],
+-    retryDelay: (attempt) => 2 ** attempt * (typeof options?.retryDelay == "number" && !Number.isNaN(options?.retryDelay) ? options.retryDelay : 1e3)
++    retryDelay: (attempt) => 2 ** attempt * (typeof options?.retryDelay == "number" && !Number.isNaN(options?.retryDelay) ? options.retryDelay : 1e3),
++    retryOn: (attempt, error, response) => {
++      if (signal.aborted || attempt >= maxRetries) return !1;
++      return Boolean(error) || response?.status === 503 || response?.status === 504;
++    },
++    signal
+   });
+ };
+ function getVersionNumber() {

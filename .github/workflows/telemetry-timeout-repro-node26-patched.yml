@@ -1,0 +1,67 @@
+name: Telemetry timeout issue repro (Node 26, patched)
+
+# Same natural matrix as telemetry-timeout-repro-node26.yml, but with the
+# upstream fix applied first. The patch in patches/storybook+10.4.1.patch
+# (generated with patch-package) ports the source fix from
+# code/core/src/telemetry/telemetry.ts: the post-build telemetry POST now runs
+# with `signal: AbortSignal.timeout(30_000)` and a `retryOn` function that stops
+# retrying once the signal is aborted — so a stalled telemetry connection can no
+# longer pin the build open forever.
+#
+# Runs `npx chromatic --dry-run` across 10 parallel matrix jobs on Node 26. With
+# the fix in place every attempt should stay green even if the telemetry
+# endpoint is slow/stalled, where the unpatched repro workflow goes red.
+#
+# Note: the patch is applied only here (explicit `npx patch-package` step). There
+# is intentionally no `postinstall` hook, so the telemetry-timeout-repro
+# workflows keep running the unpatched, still-buggy build.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false # let every attempt finish sampling
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # chromatic's git phase wants full history
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply telemetry timeout fix (patch-package)
+        run: npx patch-package
+
+      - name: Confirm the fix is in the installed build
+        run: |
+          grep -q "AbortSignal.timeout(3e4)" \
+            node_modules/storybook/dist/_node-chunks/chunk-KZ7QL465.js
+          echo "patch applied: telemetry fetch now has a 30s AbortSignal"
+
+      - name: chromatic --dry-run
+        env:
+          # Set this repo secret: gh secret set CHROMATIC_PROJECT_TOKEN
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          # Drop chromatic's build timeout from 600s so a stall fails fast; a
+          # healthy build takes ~10s. Bump to 600000 for the verbatim
+          # "Command timed out after 600000 milliseconds".
+          STORYBOOK_BUILD_TIMEOUT: "120000"
+        run: |
+          start=$(date +%s)
+          npx chromatic --dry-run
+          echo "attempt ${{ matrix.attempt }} ok in $(( $(date +%s) - start ))s"
