@@ -1,0 +1,47 @@
+name: Telemetry timeout issue repro (Node 22)
+
+# Identical to "Telemetry timeout issue repro (Node 26)" but on Node 22,
+# to compare whether the telemetry timeout issue reproduces less often on an
+# older Node than on Node 26 (newer Node stream-lifecycle changes are suspected
+# to make the stall-instead-of-exit behaviour more likely).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false # let every attempt finish sampling
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # chromatic's git phase wants full history
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: chromatic --dry-run
+        env:
+          # Set this repo secret: gh secret set CHROMATIC_PROJECT_TOKEN
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          # Drop chromatic's build timeout from 600s so a stall fails fast; a
+          # healthy build takes ~10s. Bump to 600000 for the verbatim
+          # "Command timed out after 600000 milliseconds".
+          STORYBOOK_BUILD_TIMEOUT: "120000"
+        run: |
+          start=$(date +%s)
+          npx chromatic --dry-run
+          echo "attempt ${{ matrix.attempt }} ok in $(( $(date +%s) - start ))s"

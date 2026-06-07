@@ -1,14 +1,14 @@
-name: Chromatic hang hunt (natural)
+name: Telemetry timeout issue repro (Node 26)
 
-# Tries to reproduce the original symptom naturally: `storybook build` hangs on
+# Tries to reproduce the original symptom naturally: `storybook build` stalls on
 # its post-build telemetry POST and chromatic-cli kills it at its build-command
 # timeout ("Command timed out after N milliseconds" / CLI_STORYBOOK_BUILD_FAILED).
 #
 # No blackhole — this just runs chromatic --dry-run against the real telemetry
-# endpoint in a loop and samples across a few parallel shards, hoping to catch a
-# stalled connection like the one seen in prod. A shard goes RED when it catches
-# a hang; all-green means nothing reproduced this run (expected when the endpoint
-# is healthy).
+# endpoint across 10 parallel matrix jobs (one attempt each), hoping to catch a
+# stalled connection like the one seen in prod. A job goes RED when it catches
+# the stall; all-green means nothing reproduced this run (expected when the
+# endpoint is healthy).
 
 on:
   workflow_dispatch:
@@ -19,13 +19,13 @@ permissions:
   contents: read
 
 jobs:
-  hunt:
+  repro:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
-      fail-fast: false # let every shard finish sampling
+      fail-fast: false # let every attempt finish sampling
       matrix:
-        shard: [1, 2, 3, 4]
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,20 +38,15 @@ jobs:
 
       - run: npm ci
 
-      - name: Loop chromatic --dry-run
+      - name: chromatic --dry-run
         env:
           # Set this repo secret: gh secret set CHROMATIC_PROJECT_TOKEN
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-          # Drop chromatic's build timeout from 600s so a hang fails fast; a
+          # Drop chromatic's build timeout from 600s so a stall fails fast; a
           # healthy build takes ~10s. Bump to 600000 for the verbatim
           # "Command timed out after 600000 milliseconds".
           STORYBOOK_BUILD_TIMEOUT: "120000"
         run: |
-          for i in $(seq 1 10); do
-            echo "::group::shard ${{ matrix.shard }} attempt $i"
-            start=$(date +%s)
-            npx chromatic --dry-run
-            echo "attempt $i ok in $(( $(date +%s) - start ))s"
-            echo "::endgroup::"
-          done
-          echo "no hang in 10 attempts on shard ${{ matrix.shard }}"
+          start=$(date +%s)
+          npx chromatic --dry-run
+          echo "attempt ${{ matrix.attempt }} ok in $(( $(date +%s) - start ))s"
