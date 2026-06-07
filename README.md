@@ -39,7 +39,8 @@ job goes **red** when the storybook build overruns chromatic's build timeout
 
 - [`telemetry-timeout-repro-node26.yml`](.github/workflows/telemetry-timeout-repro-node26.yml)
   — **Node 26**, unpatched. The primary repro
-  ([example failing run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/27088502769)).
+  ([example failing run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/27090256636)
+  — 23 of 50 attempts timed out).
 - [`telemetry-timeout-repro-node25.yml`](.github/workflows/telemetry-timeout-repro-node25.yml)
   — **Node 25**, unpatched. The version reported in
   [storybookjs/storybook#34446](https://github.com/storybookjs/storybook/issues/34446).
@@ -53,24 +54,29 @@ job goes **red** when the storybook build overruns chromatic's build timeout
 
 ## Results
 
-Each workflow was dispatched 5 times (50 attempts each) on 2026-06-07. A
-"telemetry timeout" is an attempt where chromatic killed the storybook build at
-its timeout — exit code `105` / `Command timed out after 120000ms` /
-`CLI_STORYBOOK_BUILD_FAILED`.
+Each workflow ran 50 attempts (one per matrix job, executed serially) on
+2026-06-07 (commit `18da431`). A "telemetry timeout" is an attempt where
+chromatic killed the storybook build at its timeout — exit code `105` /
+`Command timed out after 120000ms` / `CLI_STORYBOOK_BUILD_FAILED`.
 
 | Workflow | Node | Fix applied | Valid attempts | Telemetry timeouts | Timeout rate |
 | --- | :-: | :-: | :-: | :-: | :-: |
-| `telemetry-timeout-repro-node26` | 26 | no | 50 | 16 | **32%** |
+| `telemetry-timeout-repro-node26` | 26 | no | 50 | 23 | **46%** |
+| `telemetry-timeout-repro-node25` | 25 | no | 50 | 3 | **6%** |
 | `telemetry-timeout-repro-node22` | 22 | no | 49 | 0 | **0%** |
 | `telemetry-timeout-repro-node26-patched` | 26 | yes | 49 | 0 | **0%** |
 
 Takeaways:
 
-- **Node 26 reproduces the issue naturally ~1 in 3 attempts** against the live,
-  healthy endpoint.
-- **Node 22 never reproduced it** (0/49), supporting the hypothesis that newer
-  Node turns a slow/stalled telemetry connection into a permanent stall where
-  older Node recovers.
+- **Node 26 reproduces the issue naturally ~1 in 2 attempts** (23/50) against the
+  live endpoint. The stalls are spread evenly across the whole run, not clustered
+  in one degraded window — so the rate is intrinsic, not a timing artifact.
+- **The rate jumps ~8× from Node 25 (6%) to Node 26 (46%)** — a sharp regression
+  between two adjacent newer majors, not a gradual "newer is worse." This points
+  at a specific runtime change (likely the bundled `undici`/`fetch` socket
+  handling) landing in Node 26.
+- **Node 22 never reproduced it** (0/49): older Node recovers from a slow/stalled
+  telemetry connection where newer Node hangs permanently.
 - **The fix eliminates it on Node 26** (0/49): with the 30s `AbortSignal` the
   build always exits.
 
@@ -90,11 +96,11 @@ echo "exit: $?"   # 0, returns immediately
 
 ## Notes
 
-- Against the live telemetry endpoint the issue only presents on **Node 26**,
-  not Node 22 (see Results). The root cause is the missing `fetch` timeout, but
-  in practice newer Node turns a slow/stalled telemetry connection into a
-  permanent stall, where older Node recovers — so the reproduction is
-  Node-version dependent.
+- Against the live telemetry endpoint the reproduction is strongly **Node-version
+  dependent** (see Results): Node 26 ~46%, Node 25 ~6%, Node 22 ~0%. The root
+  cause is the missing `fetch` timeout, but whether a slow/stalled connection
+  becomes a *permanent* stall depends on the Node runtime — newer Node hangs,
+  older Node recovers.
 - Keep `STORYBOOK_DISABLE_TELEMETRY` unset when reproducing; that env var is what
   the control run uses to bypass the buggy code path.
 
