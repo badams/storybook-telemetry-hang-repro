@@ -40,6 +40,8 @@ jobs:
 
       - name: Loop chromatic --dry-run
         env:
+          # Set this repo secret: gh secret set CHROMATIC_PROJECT_TOKEN
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           # Drop chromatic's build timeout from 600s so a hang fails fast; a
           # healthy build takes ~10s. Bump to 600000 for the verbatim
           # "Command timed out after 600000 milliseconds".
@@ -48,7 +50,7 @@ jobs:
           for i in $(seq 1 10); do
             echo "::group::shard ${{ matrix.shard }} attempt $i"
             start=$(date +%s)
-            npm run chromatic -- --dry-run
+            npx chromatic --dry-run
             echo "attempt $i ok in $(( $(date +%s) - start ))s"
             echo "::endgroup::"
           done
