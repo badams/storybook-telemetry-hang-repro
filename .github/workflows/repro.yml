@@ -1,0 +1,42 @@
+name: Reproduce telemetry build hang
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    # A healthy build of this project exits in seconds. The cap below is 120s;
+    # this job timeout is just a backstop so a hung runner can't run for hours.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 26 matches the environment where this was first observed. The
+          # hang reproduces on any supported Node version — it is a missing
+          # fetch timeout, not a Node-specific bug.
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+
+      - name: Reproduce the hang
+        env:
+          CAP_SECONDS: 120
+        # harness.mjs starts a blackhole telemetry endpoint, runs `storybook
+        # build` against it, and exits 0 once it has demonstrated the hang. If a
+        # future Storybook bump fixes the timeout, the build will exit on its own
+        # and the harness exits non-zero, turning this job red (a signal that the
+        # repro is stale).
+        run: node harness.mjs | tee build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
