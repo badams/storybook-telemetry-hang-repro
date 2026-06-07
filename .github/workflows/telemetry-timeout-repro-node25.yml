@@ -1,4 +1,4 @@
-name: Telemetry timeout issue repro (Node 26, patched)
+name: Telemetry timeout issue repro (Node 25)
 on:
   workflow_dispatch:
   push:
@@ -7,8 +7,8 @@ on:
 permissions:
   contents: read
 
-# Serialize runs of THIS workflow (keyed per-workflow so the unpatched Node 26 /
-# Node 22 variants can still run alongside it). Prevents runs stacking up.
+# Serialize runs of THIS workflow (keyed per-workflow so the other variants can
+# still run alongside it). Prevents runs stacking up.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -29,13 +29,10 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 26
+          node-version: 25
           cache: npm
 
       - run: npm ci
-
-      - name: Apply telemetry timeout fix (patch-package)
-        run: npx patch-package
 
       - name: chromatic --dry-run
         env:

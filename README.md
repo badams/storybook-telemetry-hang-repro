@@ -18,11 +18,11 @@ await telemetry('build', payload, { configDir: options.configDir });
 ```
 
 That POST is a `fetch` with **no timeout / `AbortSignal`**
-(`core/src/telemetry/telemetry.ts`). If the connection stalls — a blackholed or
-degraded `storybook.js.org/event-log`, a proxy that swallows the request — the
-`fetch` never settles, the `await` never returns, and the open socket keeps the
-Node event loop alive. The `try/catch` around the call does not help: a stall
-never *rejects*, so there is nothing to catch.
+(`core/src/telemetry/telemetry.ts`). If the connection stalls — a slow or
+degraded `storybook.js.org/event-log` — the `fetch` never settles, the `await`
+never returns, and the open socket keeps the Node event loop alive. The
+`try/catch` around the call does not help: a stall never *rejects*, so there is
+nothing to catch.
 
 In CI this looks like a build that prints success (or gets close to it) and then
 sits until the job's wall-clock limit kills it. With chromatic-cli it surfaces as
@@ -30,20 +30,54 @@ sits until the job's wall-clock limit kills it. With chromatic-cli it surfaces a
 
 ## Reproduce it in CI
 
-This repo reproduces the telemetry timeout issue **naturally** — no blackhole,
-just a real `chromatic --dry-run` against the live telemetry endpoint — across
-two GitHub Actions workflows:
+This repo reproduces the telemetry timeout issue **naturally**, with a real
+`chromatic --dry-run` against the live telemetry endpoint, across four GitHub
+Actions workflows. Each runs `npx chromatic --dry-run` over a 50-job matrix (one
+attempt per job, executed one at a time to stay under chromatic's rate limit); a
+job goes **red** when the storybook build overruns chromatic's build timeout
+(`STORYBOOK_BUILD_TIMEOUT=120000`), i.e. the telemetry POST stalled.
 
 - [`telemetry-timeout-repro-node26.yml`](.github/workflows/telemetry-timeout-repro-node26.yml)
-  — runs `npx chromatic --dry-run` across 10 parallel matrix jobs (one attempt
-  each) on **Node 26**. A job goes **red** when it catches the stall (the
-  chromatic build timeout fires).
+  — **Node 26**, unpatched. The primary repro
+  ([example failing run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/27088502769)).
+- [`telemetry-timeout-repro-node25.yml`](.github/workflows/telemetry-timeout-repro-node25.yml)
+  — **Node 25**, unpatched. The version reported in
+  [storybookjs/storybook#34446](https://github.com/storybookjs/storybook/issues/34446).
 - [`telemetry-timeout-repro-node22.yml`](.github/workflows/telemetry-timeout-repro-node22.yml)
-  — same repro on **Node 22**, for a node-version frequency comparison.
+  — **Node 22**, unpatched. Node-version comparison.
+- [`telemetry-timeout-repro-node26-patched.yml`](.github/workflows/telemetry-timeout-repro-node26-patched.yml)
+  — **Node 26**, with the upstream fix applied via `patch-package`
+  ([`patches/storybook+10.4.1.patch`](patches/storybook+10.4.1.patch)). The fix
+  adds `signal: AbortSignal.timeout(30_000)` so a stalled POST aborts instead of
+  pinning the build open.
 
-So far the issue reproduces on Node 26 but not Node 22 — strong evidence that
-newer Node turns a stalled telemetry connection into a permanent stall where
-older Node eventually recovers.
+## Results
+
+Each workflow was dispatched 5 times (50 attempts each) on 2026-06-07. A
+"telemetry timeout" is an attempt where chromatic killed the storybook build at
+its timeout — exit code `105` / `Command timed out after 120000ms` /
+`CLI_STORYBOOK_BUILD_FAILED`.
+
+| Workflow | Node | Fix applied | Valid attempts | Telemetry timeouts | Timeout rate |
+| --- | :-: | :-: | :-: | :-: | :-: |
+| `telemetry-timeout-repro-node26` | 26 | no | 50 | 16 | **32%** |
+| `telemetry-timeout-repro-node22` | 22 | no | 49 | 0 | **0%** |
+| `telemetry-timeout-repro-node26-patched` | 26 | yes | 49 | 0 | **0%** |
+
+Takeaways:
+
+- **Node 26 reproduces the issue naturally ~1 in 3 attempts** against the live,
+  healthy endpoint.
+- **Node 22 never reproduced it** (0/49), supporting the hypothesis that newer
+  Node turns a slow/stalled telemetry connection into a permanent stall where
+  older Node recovers.
+- **The fix eliminates it on Node 26** (0/49): with the 30s `AbortSignal` the
+  build always exits.
+
+> Two attempts (one Node 22, one patched) failed instead with chromatic's *own*
+> TLS/connection error (exit code `255`, a transient chromatic-side rate limit)
+> rather than a build timeout. These are a different failure mode and are
+> excluded from the counts above as invalid samples.
 
 ### Control: prove it is the telemetry call
 
@@ -56,9 +90,11 @@ echo "exit: $?"   # 0, returns immediately
 
 ## Notes
 
-- Node 26 matches where this was first seen, but the issue is **not**
-  Node-specific — it is a missing fetch timeout and reproduces on any supported
-  Node version.
+- Against the live telemetry endpoint the issue only presents on **Node 26**,
+  not Node 22 (see Results). The root cause is the missing `fetch` timeout, but
+  in practice newer Node turns a slow/stalled telemetry connection into a
+  permanent stall, where older Node recovers — so the reproduction is
+  Node-version dependent.
 - Keep `STORYBOOK_DISABLE_TELEMETRY` unset when reproducing; that env var is what
   the control run uses to bypass the buggy code path.
 
@@ -66,4 +102,4 @@ echo "exit: $?"   # 0, returns immediately
 
 - Upstream issue: _TODO_
 - Upstream fix PR: _TODO_
-- Related reports: storybookjs/storybook#29828, storybookjs/storybook#24303
+- Related reports: storybookjs/storybook#34446, storybookjs/storybook#29828, storybookjs/storybook#24303

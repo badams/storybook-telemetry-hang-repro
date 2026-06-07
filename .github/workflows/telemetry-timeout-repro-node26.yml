@@ -1,15 +1,4 @@
 name: Telemetry timeout issue repro (Node 26)
-
-# Tries to reproduce the original symptom naturally: `storybook build` stalls on
-# its post-build telemetry POST and chromatic-cli kills it at its build-command
-# timeout ("Command timed out after N milliseconds" / CLI_STORYBOOK_BUILD_FAILED).
-#
-# No blackhole — this just runs chromatic --dry-run against the real telemetry
-# endpoint across 10 parallel matrix jobs (one attempt each), hoping to catch a
-# stalled connection like the one seen in prod. A job goes RED when it catches
-# the stall; all-green means nothing reproduced this run (expected when the
-# endpoint is healthy).
-
 on:
   workflow_dispatch:
   push:
@@ -18,20 +7,27 @@ on:
 permissions:
   contents: read
 
+# Serialize runs of THIS workflow (keyed per-workflow so the Node 22 / patched
+# variants can still run alongside it). Prevents runs stacking up.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   repro:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false # let every attempt finish sampling
+      max-parallel: 1 # one chromatic auth at a time — avoids self-inflicted rate limiting
       matrix:
-        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # chromatic's git phase wants full history
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 26
           cache: npm
@@ -50,3 +46,6 @@ jobs:
           start=$(date +%s)
           npx chromatic --dry-run
           echo "attempt ${{ matrix.attempt }} ok in $(( $(date +%s) - start ))s"
+
+      - name: Cooldown (jittered, spaces out chromatic auth)
+        run: sleep $((30 + RANDOM % 31))
