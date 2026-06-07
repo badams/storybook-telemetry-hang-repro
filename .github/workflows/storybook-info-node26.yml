@@ -1,0 +1,31 @@
+name: storybook info (Node 26) [temporary]
+
+# TEMPORARY — captures `storybook info` output (OS, Node/npm, storybook package
+# versions) on Node 26 for pasting into the upstream bug report. Safe to delete
+# once the report is filed. Runs on push so the output is captured automatically,
+# plus manual dispatch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+
+      - name: storybook info
+        run: npx storybook@latest info

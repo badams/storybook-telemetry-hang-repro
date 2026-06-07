@@ -1,8 +1,6 @@
 name: Telemetry timeout issue repro (Node 25)
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read

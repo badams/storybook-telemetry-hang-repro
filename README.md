@@ -59,12 +59,12 @@ Each workflow ran 50 attempts (one per matrix job, executed serially) on
 chromatic killed the storybook build at its timeout — exit code `105` /
 `Command timed out after 120000ms` / `CLI_STORYBOOK_BUILD_FAILED`.
 
-| Workflow | Node | Fix applied | Valid attempts | Telemetry timeouts | Timeout rate |
-| --- | :-: | :-: | :-: | :-: | :-: |
-| `telemetry-timeout-repro-node26` | 26 | no | 50 | 23 | **46%** |
-| `telemetry-timeout-repro-node25` | 25 | no | 50 | 3 | **6%** |
-| `telemetry-timeout-repro-node22` | 22 | no | 49 | 0 | **0%** |
-| `telemetry-timeout-repro-node26-patched` | 26 | yes | 49 | 0 | **0%** |
+| Workflow | Node | Fix applied | Valid attempts | Telemetry timeouts | Timeout rate | Run |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| `telemetry-timeout-repro-node26` | 26 | no | 50 | 23 | **46%** | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/27090256636) |
+| `telemetry-timeout-repro-node25` | 25 | no | 50 | 3 | **6%** | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/27090256639) |
+| `telemetry-timeout-repro-node22` | 22 | no | 49 | 0 | **0%** | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/27090256648) |
+| `telemetry-timeout-repro-node26-patched` | 26 | yes | 49 | 0 | **0%** | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/27090256642) |
 
 Takeaways:
 
