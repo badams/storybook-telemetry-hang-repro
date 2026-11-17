@@ -1,6 +1,10 @@
 name: Telemetry timeout issue repro (Node 26)
 on:
   workflow_dispatch:
+    inputs:
+      node-version:
+        description: Node version, e.g. 26.3.0 to pin the release the bug was first measured on
+        default: "26"
 
 permissions:
   contents: read
@@ -27,7 +31,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 26
+          node-version: ${{ inputs.node-version }}
           cache: npm
 
       - run: npm ci
