@@ -85,6 +85,31 @@ Takeaways:
 > rather than a build timeout. These are a different failure mode and are
 > excluded from the counts above as invalid samples.
 
+### Follow-up: is HTTP/2 the Node 26 trigger? (2026-11-17, inconclusive)
+
+Node 26 bundles undici 8, which enables HTTP/2 for `fetch` by default
+([nodejs/undici#4828](https://github.com/nodejs/undici/pull/4828)), and
+`storybook.js.org` negotiates HTTP/2. So the telemetry POST moved from HTTP/1.1
+to HTTP/2 on Node 26. To test whether that is what stalls it,
+[`telemetry-timeout-repro-node26-http1.yml`](.github/workflows/telemetry-timeout-repro-node26-http1.yml)
+runs the unpatched Node 26 repro with `fetch` forced back to HTTP/1.1
+([`scripts/force-http1.mjs`](scripts/force-http1.mjs)). Each job first asserts
+the protocol with [`scripts/check-protocol.mjs`](scripts/check-protocol.mjs):
+HTTP/2 by default, HTTP/1.1 with the preload.
+
+| Node | fetch protocol | Attempts | Telemetry timeouts | Run |
+| :-: | :-: | :-: | :-: | :-: |
+| 26.13.1 | HTTP/2 (default) | 50 | 0 | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/44019490916) |
+| 26.13.1 | HTTP/1.1 | 50 | 0 | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/44019485942) |
+| 26.3.0 | HTTP/2 (default) | 50 | 0 | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/44028206584) |
+| 26.3.0 | HTTP/1.1 | 50 | 0 | [run](https://github.com/badams/storybook-telemetry-hang-repro/actions/runs/44028200980) |
+
+Node 26.3.0 is the release that timed out on 23 of 50 attempts in June, and it
+no longer times out with the same code. So the live endpoint has changed since
+June, the natural repro above no longer reproduces, and the HTTP/2 theory can
+neither be confirmed nor ruled out against it. The deterministic blackhole repro
+still works on any Node version.
+
 ### Control: prove it is the telemetry call
 
 Disable telemetry and the same build exits cleanly in seconds:
