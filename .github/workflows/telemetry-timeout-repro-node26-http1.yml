@@ -1,0 +1,56 @@
+name: Telemetry timeout issue repro (Node 26, HTTP/1.1)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize runs of THIS workflow (keyed per-workflow so the Node 22 / patched
+# variants can still run alongside it). Prevents runs stacking up.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false # let every attempt finish sampling
+      max-parallel: 1 # one chromatic auth at a time — avoids self-inflicted rate limiting
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # chromatic's git phase wants full history
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+
+      - name: Confirm fetch uses HTTP/2 by default and HTTP/1.1 with the preload
+        run: |
+          node scripts/check-protocol.mjs h2
+          NODE_OPTIONS="--import $GITHUB_WORKSPACE/scripts/force-http1.mjs" node scripts/check-protocol.mjs http/1.1
+
+      - name: chromatic --dry-run
+        env:
+          # Set this repo secret: gh secret set CHROMATIC_PROJECT_TOKEN
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          # Drop chromatic's build timeout from 600s so a stall fails fast; a
+          # healthy build takes ~10s. Bump to 600000 for the verbatim
+          # "Command timed out after 600000 milliseconds".
+          STORYBOOK_BUILD_TIMEOUT: "120000"
+          # The only difference from the Node 26 workflow: force HTTP/1.1 for fetch.
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/force-http1.mjs
+        run: |
+          start=$(date +%s)
+          npx chromatic --dry-run
+          echo "attempt ${{ matrix.attempt }} ok in $(( $(date +%s) - start ))s"
+
+      - name: Cooldown (jittered, spaces out chromatic auth)
+        run: sleep $((30 + RANDOM % 31))
